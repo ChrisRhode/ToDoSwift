@@ -65,7 +65,7 @@ class ToDoItem: NSObject {
         super.init()
     }
     
-    func saveNew()
+    func saveNew(withParentItemID: Int)
     {
         var sql: String
         var recordList: [[String]] = []
@@ -97,12 +97,20 @@ class ToDoItem: NSObject {
         
         // ***** will need to fix for current parent etc
         
-       sql = "INSERT INTO Items (ItemID,ParentItemID,ChildCount,ItemText,Notes,BumpCount,DateOfEvent,BumpToTopDate,isGrayedOut,isDeleted) VALUES (?,0,0,?,NULL,0,NULL,NULL,0,0)"
+       sql = "INSERT INTO Items (ItemID,ParentItemID,ChildCount,ItemText,Notes,BumpCount,DateOfEvent,BumpToTopDate,isGrayedOut,isDeleted) VALUES (?,?,0,?,NULL,0,NULL,NULL,0,0)"
         let _ = db.doCommandWithParamsStart(sql: sql)
         let _ = db.doCommandWithParamsAddParameter(paramType: "I", paramValue: "\(nextItemID)")
+        let _ = db.doCommandWithParamsAddParameter(paramType: "I", paramValue: String(withParentItemID))
         let _ = db.doCommandWithParamsAddParameter(paramType: "S", paramValue: itemText)
         let _ = db.doCommmandWithParamsEnd()
         
+        if (withParentItemID != 0)
+        {
+            sql = "UPDATE Items SET ChildCount = ChildCount + 1 WHERE ItemID = ?"
+            let _ = db.doCommandWithParamsStart(sql: sql)
+                  let _ = db.doCommandWithParamsAddParameter(paramType: "I", paramValue: "\(withParentItemID)")
+                  let _ = db.doCommmandWithParamsEnd()
+        }
         db.closeDB()
         
     }

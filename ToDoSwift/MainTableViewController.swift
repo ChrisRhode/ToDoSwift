@@ -12,15 +12,15 @@ class MainTableViewController: UITableViewController, DatePickerPassbackDelegate
 
     let ugbl : Utility
     let db : DBWrapper
-    // ** Int vs UInt?
-    var selectedRow: Int?
-    //var dateValue: String = "03/25/2020"
+    // ** program for forceReload / natural calls / viewWillAppear
     var forceReload: Bool = true
     var searchadd : UITextField? = nil
     var isSearchMode : Bool = false
     var currParentItemID : Int = 0
+    var currParentItemText : String = "$(root)"
     
-    var recordList: [[String]] = []
+    //var recordList: [[String]] = []
+    var itemsAtThisLevel : [ToDoItem] = []
     
     // ** all of the above have to be initialized in an init, cannot do in viewDidLoad etc
     // ** may be required to define all possible init methods, definmitely the one used to create it
@@ -78,10 +78,6 @@ class MainTableViewController: UITableViewController, DatePickerPassbackDelegate
        // let _ = db.executeSQLCommand(theSQL: "INSERT INTO Items VALUES (1,1,0,0,'Hello World',NULL,0,NULL,0,0);")
        // let _ = db.executeSQLCommand(theSQL: "INSERT INTO Items VALUES (1,2,0,0,'Second Record',NULL,0,NULL,0,0);")
        // let _ = db.doSelect(sql: "SELECT * FROM Items", records: &recordList)
-        
-        
-        
-        
     }
     
     override func viewWillAppear(_ animated: Bool) {
@@ -105,23 +101,75 @@ class MainTableViewController: UITableViewController, DatePickerPassbackDelegate
 
     override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
         // #warning Incomplete implementation, return the number of rows
-        return recordList.count
+        return (itemsAtThisLevel.count)+1
     }
     override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
+        // ** code for reusable cells
+        
        // let cell = tableView.dequeueReusableCell(withIdentifier: "reuseIdentifier", for: indexPath)
         let cell = UITableViewCell.init(style: .subtitle, reuseIdentifier: "MainListCell")
+        cell.accessoryType = .none
         let thisRow = indexPath.row
-        let thisItemID = Int(recordList[thisRow][0])
-        let thisItem = ToDoItem(requestedItemID: thisItemID!)
-        cell.textLabel!.text = thisItem.itemText
-        cell.detailTextLabel!.text = ""
+        //let thisItemID = Int(recordList[thisRow][0])
+        //let thisItem = ToDoItem(requestedItemID: thisItemID!)
+        if (thisRow == 0)
+        {
+            var theValue = currParentItemText
+            if (currParentItemID != 0)
+            {
+                theValue = "<- " + theValue
+            }
+            cell.textLabel?.text = theValue
+            cell.detailTextLabel?.text = ""
+        }
+        else
+        {
+            let thisItem = itemsAtThisLevel[thisRow-1]
+            cell.textLabel?.text = thisItem.itemText
+            cell.detailTextLabel?.text = ""
+            if (thisItem.childCount > 0)
+            {
+                cell.accessoryType = .disclosureIndicator
+            }
+        }
+       
         // Configure the cell...
-
+        
         return cell
     }
     
     override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
         
+        let thisRow = indexPath.row
+        if (thisRow == 0)
+        {
+            if (currParentItemID != 0)
+            {
+                // repopulate based on parent node
+                let currParentItem = ToDoItem(requestedItemID: currParentItemID)
+                let newParentItemID = currParentItem.parentItemID
+                currParentItemID = newParentItemID
+                if (newParentItemID == 0)
+                {
+                    currParentItemText = "$(root)"
+                }
+                else
+                {
+                   let newParentItem = ToDoItem(requestedItemID: currParentItem.parentItemID)
+                    currParentItemText = newParentItem.itemText
+                }
+                loadCurrentChildren()
+                self.tableView.reloadData()
+            }
+        }
+        else
+        {
+            let thisItem = itemsAtThisLevel[thisRow-1]
+            currParentItemID = thisItem.itemID
+            currParentItemText = thisItem.itemText
+            loadCurrentChildren()
+            self.tableView.reloadData()
+        }
        // selectedRow = indexPath.row
         
         // edit the date
@@ -171,7 +219,7 @@ class MainTableViewController: UITableViewController, DatePickerPassbackDelegate
         }
         let theNewItem = ToDoItem()
         theNewItem.itemText = finalTextFieldValue!
-        theNewItem.saveNew()
+        theNewItem.saveNew(withParentItemID: currParentItemID)
         textField.text = ""
         loadCurrentChildren()
         self.tableView.reloadData()
@@ -182,11 +230,26 @@ class MainTableViewController: UITableViewController, DatePickerPassbackDelegate
     // load items at current level
     func loadCurrentChildren()
     {
+        var recordList : [[String]] = []
+        var ndx : Int
+        var lastNdx : Int
+        var thisItemID : Int?
+        
         let sql = "SELECT ItemID FROM Items WHERE (ParentItemID = \(currParentItemID)) ORDER BY ItemID DESC"
         let _ = db.openDB()
         let _ = db.doSelect(sql: sql, records: &recordList)
         db.closeDB()
         
+        lastNdx = recordList.count - 1
+        ndx = 0
+        // ***** keepingCapacity?
+        itemsAtThisLevel.removeAll()
+        while (ndx <= lastNdx)
+        {
+            thisItemID = Int(recordList[ndx][0])
+            itemsAtThisLevel.append(ToDoItem(requestedItemID: thisItemID!))
+            ndx += 1
+        }
     }
     
     // template code after this line
