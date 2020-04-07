@@ -8,6 +8,8 @@
 
 import UIKit
 
+// ** should search mode focus within current level or continue to be global?
+
 class MainTableViewController: UITableViewController, DatePickerPassbackDelegate, UITextFieldDelegate {
 
     let ugbl : Utility
@@ -15,6 +17,7 @@ class MainTableViewController: UITableViewController, DatePickerPassbackDelegate
     // ** program for forceReload / natural calls / viewWillAppear
     var forceReload: Bool = true
     var searchadd : UITextField? = nil
+    // ** all special handling based on search mode
     var isSearchMode : Bool = false
     var currParentItemID : Int = 0
     var currParentItemText : String = "$(root)"
@@ -114,13 +117,22 @@ class MainTableViewController: UITableViewController, DatePickerPassbackDelegate
         //let thisItem = ToDoItem(requestedItemID: thisItemID!)
         if (thisRow == 0)
         {
-            var theValue = currParentItemText
-            if (currParentItemID != 0)
+            if (isSearchMode)
             {
-                theValue = "<- " + theValue
+                cell.textLabel?.text = ""
+                cell.detailTextLabel?.text = ""
             }
-            cell.textLabel?.text = theValue
-            cell.detailTextLabel?.text = ""
+            else
+            {
+                var theValue = currParentItemText
+                if (currParentItemID != 0)
+                {
+                    theValue = "<- " + theValue
+                }
+                cell.textLabel?.text = theValue
+                cell.detailTextLabel?.text = ""
+            }
+            
         }
         else
         {
@@ -143,30 +155,39 @@ class MainTableViewController: UITableViewController, DatePickerPassbackDelegate
         let thisRow = indexPath.row
         if (thisRow == 0)
         {
-            if (currParentItemID != 0)
+            if (!isSearchMode)
             {
-                // repopulate based on parent node
-                let currParentItem = ToDoItem(requestedItemID: currParentItemID)
-                let newParentItemID = currParentItem.parentItemID
-                currParentItemID = newParentItemID
-                if (newParentItemID == 0)
-                {
-                    currParentItemText = "$(root)"
-                }
-                else
-                {
-                   let newParentItem = ToDoItem(requestedItemID: currParentItem.parentItemID)
-                    currParentItemText = newParentItem.itemText
-                }
-                loadCurrentChildren()
-                self.tableView.reloadData()
+                if (currParentItemID != 0)
+                           {
+                               // repopulate based on parent node
+                               let currParentItem = ToDoItem(requestedItemID: currParentItemID)
+                               let newParentItemID = currParentItem.parentItemID
+                               currParentItemID = newParentItemID
+                               if (newParentItemID == 0)
+                               {
+                                   currParentItemText = "$(root)"
+                               }
+                               else
+                               {
+                                  let newParentItem = ToDoItem(requestedItemID: currParentItem.parentItemID)
+                                   currParentItemText = newParentItem.itemText
+                               }
+                               loadCurrentChildren()
+                               self.tableView.reloadData()
+                           }
             }
+           
         }
         else
         {
             let thisItem = itemsAtThisLevel[thisRow-1]
             currParentItemID = thisItem.itemID
             currParentItemText = thisItem.itemText
+            if (isSearchMode)
+            {
+                isSearchMode = false
+                searchadd?.text = ""
+            }
             loadCurrentChildren()
             self.tableView.reloadData()
         }
@@ -194,18 +215,38 @@ class MainTableViewController: UITableViewController, DatePickerPassbackDelegate
     
     func textFieldDidChangeSelection(_ textField: UITextField) {
         let currentTextFieldValue = textField.text
-        // *** currentTextFieldValue?.count does not work
+        // ** currentTextFieldValue?.count does not work
         if (currentTextFieldValue!.count >= 2)
         {
+            var recordList : [[String]] = []
+            var thisItemID : Int?
             // instate search mode based on characters entered so far
-           // isSearchMode = true
-           // let sql = "SELECT ItemID"
+            isSearchMode = true
+            // ** code for parameterized select, to protect against SQL injection
+            let sql = "SELECT ItemID FROM Items WHERE (ItemText LIKE '%" + currentTextFieldValue! + "%')"
+            let _ = db.openDB()
+            let _ = db.doSelect(sql: sql, records: &recordList)
+            // ** commonize this with regular load
+            db.closeDB()
             
+            let lastNdx = recordList.count - 1
+            var ndx = 0
+            // ***** keepingCapacity?
+            itemsAtThisLevel.removeAll()
+            while (ndx <= lastNdx)
+            {
+                thisItemID = Int(recordList[ndx][0])
+                itemsAtThisLevel.append(ToDoItem(requestedItemID: thisItemID!))
+                ndx += 1
+            }
         }
         else
         {
-            
+            // restore to normal mode
+            isSearchMode = false
+            loadCurrentChildren()
         }
+        self.tableView.reloadData()
         
     }
     
